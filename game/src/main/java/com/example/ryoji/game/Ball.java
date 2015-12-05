@@ -3,6 +3,7 @@ package com.example.ryoji.game;
 import android.graphics.Canvas;
 import android.graphics.Color;
 import android.graphics.Paint;
+import android.os.Bundle;
 
 /**
  * Created by Ryoji on 11/29/15.
@@ -17,6 +18,10 @@ public class Ball implements DrawableItem {
     private final float mInitialY;
     private final float mInitialSpeedX;
     private final float mInitialSpeedY;
+    private static final String KEY_X = "x";
+    private static final String KEY_Y = "y";
+    private static final String KEY_SPEED_X = "speed_x";
+    private static final String KEY_SPEED_Y = "speed_y";
 
 
 
@@ -79,5 +84,23 @@ public class Ball implements DrawableItem {
         mY = mInitialY;
         mSpeedY = mInitialSpeedY;
         mSpeedX = mInitialSpeedX * ((float) Math.random() - 0.5f);
+    }
+
+    public Bundle save(int width, int height){
+        Bundle outState = new Bundle();
+        outState.putFloat(KEY_X, mX / width);
+        outState.putFloat(KEY_Y, mY / height);
+        outState.putFloat(KEY_SPEED_X, mSpeedX / width);
+        outState.putFloat(KEY_SPEED_Y, mSpeedY / height);
+        return outState;
+
+    }
+
+    public void restore(Bundle inState, int width, int height){
+        mX = inState.getFloat(KEY_X) * width;
+        mY = inState.getFloat(KEY_Y) * height;
+        mSpeedX = inState.getFloat(KEY_SPEED_X) * width;
+        mSpeedY = inState.getFloat(KEY_SPEED_Y) * height;
+
     }
 }

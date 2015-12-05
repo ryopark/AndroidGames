@@ -11,7 +11,7 @@ public class GameActivity extends AppCompatActivity {
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
-        mView = new GameView(this);
+        mView = new GameView(this, savedInstanceState);
         setContentView(mView);
 
 
@@ -49,5 +49,11 @@ public class GameActivity extends AppCompatActivity {
         }
 
         return super.onOptionsItemSelected(item);
+    }
+
+    @Override
+    protected void onSaveInstanceState(Bundle outState){
+        super.onSaveInstanceState(outState);
+        mView.onSaveInstanceState(outState);
     }
 }

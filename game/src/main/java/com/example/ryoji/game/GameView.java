@@ -1,10 +1,14 @@
 package com.example.ryoji.game;
 
 import android.content.Context;
+import android.content.Intent;
 import android.graphics.Canvas;
 import android.graphics.Color;
 import android.graphics.Paint;
 import android.graphics.SurfaceTexture;
+import android.os.Bundle;
+import android.os.Handler;
+import android.os.Message;
 import android.view.MotionEvent;
 import android.view.TextureView;
 import android.view.View;
@@ -22,6 +26,7 @@ public class GameView extends TextureView implements SurfaceTextureListener, Vie
     volatile private float mTouchedX;
     volatile private float mTouchedY;
     private ArrayList<DrawableItem> mItemList;
+    private ArrayList<Block> mBlockList;
     private Pad mPad;
     private float mPadHalfWidth;
     private Ball mBall;
@@ -31,6 +36,15 @@ public class GameView extends TextureView implements SurfaceTextureListener, Vie
     public static final int BLOCK_COUNT = 100;
     public static final int DEFAULT_LIFE = 5;
     private int mLife;
+    private long mGameStartTime;
+    private Handler mHandler;
+    private static final String KEY_LIFE = "life";
+    private static final String KEY_GAME_START_TIME = "game_start_time";
+    private static final String KEY_BALL = "ball";
+    private static final String KEY_BLOCK = "block";
+    private final Bundle mSavedInstanceState;
+
+
 
     public void start(){
         mIsRunnable = true;
@@ -81,7 +95,19 @@ public class GameView extends TextureView implements SurfaceTextureListener, Vie
                             if(mLife>0){
                                 mLife--;
                                 mBall.reset();
+                            }else{
+                                unlockCanvasAndPost(canvas);
+                                Message message = Message.obtain();
+                                Bundle bundle = new Bundle();
+                                bundle.putBoolean(ClearActivity.EXTRA_IS_CLEAR, false);
+                                bundle.putInt(ClearActivity.EXTRA_BLOCK_COUNT, getBlockCount());
+                                bundle.putLong(ClearActivity.EXTRA_TIME,
+                                        System.currentTimeMillis() - mGameStartTime);
+                                message.setData(bundle);
+                                mHandler.sendMessage(message);
+                                return;
                             }
+
                         }
 
                         Block leftBlock = getBlock(ballLeft, mBall.getY());
@@ -89,24 +115,30 @@ public class GameView extends TextureView implements SurfaceTextureListener, Vie
                         Block rightBlock = getBlock(ballRight, mBall.getY());
                         Block bottomBlock = getBlock(mBall.getX(), ballBottom);
 
+                        boolean isCollision = false;
+
                         if(leftBlock != null){
                             mBall.setSpeedX(-mBall.getSpeedX());
                             leftBlock.collision();
+                            isCollision = true;
                         }
 
                         if(topBlock != null){
                             mBall.setSpeedY(-mBall.getSpeedY());
                             topBlock.collision();
+                            isCollision = true;
                         }
 
                         if(rightBlock != null){
                             mBall.setSpeedX(-mBall.getSpeedX());
                             rightBlock.collision();
+                            isCollision = true;
                         }
 
                         if(bottomBlock != null){
                             mBall.setSpeedY(-mBall.getSpeedY());
                             bottomBlock.collision();
+                            isCollision = true;
                         }
 
                         float padTop = mPad.getTop();
@@ -133,6 +165,17 @@ public class GameView extends TextureView implements SurfaceTextureListener, Vie
                             item.draw(canvas,paint);
                         }
                         unlockCanvasAndPost(canvas);
+
+                        if(isCollision && getBlockCount() == 0){
+                            Message message = Message.obtain();
+                            Bundle bundle = new Bundle();
+                            bundle.putBoolean(ClearActivity.EXTRA_IS_CLEAR, true);
+                            bundle.putInt(ClearActivity.EXTRA_BLOCK_COUNT, 0);
+                            bundle.putLong(ClearActivity.EXTRA_TIME,
+                                    System.currentTimeMillis() - mGameStartTime);
+                            message.setData(bundle);
+                            mHandler.sendMessage(message);
+                        }
                         long sleepTime = 16 - (System.currentTimeMillis() - startTime);
 
                         if(sleepTime > 0) {
@@ -159,10 +202,22 @@ public class GameView extends TextureView implements SurfaceTextureListener, Vie
 
 
 
-    public GameView(Context context) {
+    public GameView(final Context context, Bundle savedInstanceState) {
         super(context);
         setSurfaceTextureListener(this);
         setOnTouchListener(this);
+        mSavedInstanceState = savedInstanceState;
+        mHandler = new Handler() {
+            // UI Thread で実行されるHandler
+            @Override
+            public void handleMessage(Message message) {
+                Intent intent = new Intent(context, ClearActivity.class);
+                intent.setFlags(Intent.FLAG_ACTIVITY_NO_HISTORY);
+                intent.putExtras(message.getData());
+                context.startActivity(intent);
+
+            }
+        };
 
     }
 
@@ -205,14 +260,16 @@ public class GameView extends TextureView implements SurfaceTextureListener, Vie
         mBlockWidth = width / 10;
         mBlockHeight = height / 20;
         mItemList = new ArrayList<DrawableItem>();
+        mBlockList = new ArrayList<Block>();
 
         for(int i=0; i < BLOCK_COUNT; i++){
             float blockTop = i / 10 * mBlockHeight;
             float blockLeft = i % 10 * mBlockWidth;
             float blockBottom = blockTop + mBlockHeight;
             float blockRight = blockLeft + mBlockWidth;
-            mItemList.add(new Block(blockTop,blockLeft,blockRight,blockBottom));
+            mBlockList.add(new Block(blockTop,blockLeft,blockRight,blockBottom));
         }
+        mItemList.addAll(mBlockList);
 
         mPad = new Pad(height * 0.8f, height * 0.85f);
         mItemList.add(mPad);
@@ -223,7 +280,17 @@ public class GameView extends TextureView implements SurfaceTextureListener, Vie
 
         mLife = DEFAULT_LIFE;
 
+        mGameStartTime = System.currentTimeMillis(); //game開始時間記録
 
+        if(mSavedInstanceState != null) {
+            mLife = mSavedInstanceState.getInt(KEY_LIFE);
+            mGameStartTime = mSavedInstanceState.getLong(KEY_GAME_START_TIME);
+            mBall.restore(mSavedInstanceState.getBundle(KEY_BALL), width, height);
+            for(int i=0; i < BLOCK_COUNT; i++){
+                mBlockList.get(i).restore(mSavedInstanceState.getBundle(KEY_BLOCK +
+                String.valueOf(i)));
+            }
+        }
 
     }
 
@@ -238,5 +305,25 @@ public class GameView extends TextureView implements SurfaceTextureListener, Vie
         }
 
         return null;
+    }
+
+    private int getBlockCount(){
+        int count = 0;
+        for(Block block :mBlockList){
+            if(block.isExist()){
+                count ++;
+            }
+        }
+        return count;
+    }
+
+    public void onSaveInstanceState(Bundle outState) {
+        outState.putInt(KEY_LIFE, mLife);
+        outState.putLong(KEY_GAME_START_TIME, mGameStartTime);
+        outState.putBundle(KEY_BALL, mBall.save(getWidth(),getHeight()));
+
+        for(int i=0;i < BLOCK_COUNT; i++){
+            outState.putBundle(KEY_BLOCK + String.valueOf(i), mBlockList.get(i).save());
+        }
     }
 }
